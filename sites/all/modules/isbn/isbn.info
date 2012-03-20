@@ -1,0 +1,6 @@
+name = ISBN Field
+description = Holds ISBN Information
+package = Other
+core = 7.x
+;files[] = field_example.test
+

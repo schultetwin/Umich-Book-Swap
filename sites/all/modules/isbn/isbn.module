@@ -1,0 +1,214 @@
+<?php
+/**
+ * @file
+ * Implementation of an isbn field.
+ */
+
+/***************************************************************
+ * Field Type API hooks
+ ***************************************************************/
+
+/**
+ * Implements hook_field_info().
+ *
+ * Provides the description of the field.
+ */
+function isbn_field_info() {
+  return array(
+    // We name our field as the associative name of the array.
+    'isbn' => array(
+      'label' => t('ISBN Field'),
+      'description' => t('Holds ISBN Information for a book'),
+      'settings' => array(),
+      'instance_settings' => array(),
+      'default_widget' => 'isbn_text',
+      'default_formatter' => 'isbn_13',
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_validate().
+ *
+ * @see field_example_field_widget_error()
+ */
+function isbn_field_validate($entity_type, $entity, $field, $instance, $langcode, $items, &$errors) {
+  foreach ($items as $delta => $item) {
+    if (!empty($item['value'])) {
+
+      // Allow isbn 10, by convert to isbn 13
+      // Should probably do checking of proper ISBN in widget. Here lets
+      // just make sure it's below 13 chars.
+
+      $item['value'] = str_replace(array(' ', '-'), '', $item['value']);
+      
+      if (strlen($item['value']) == 10) {
+        $item['value'] = '978' . $item['value'];
+      }
+      
+      // ISBN must be 13 characters long.
+      if (strlen($item['value']) != 13) {
+        $errors[$field['value']][$langcode][$delta][] = array(
+          'error' => 'isbn_invalid',
+          'message' => t('@label to large to be ISBN', array('@label' => $instance['label'])),
+        );
+      }
+      
+      if (!isbn_13_valid($item['value'])) {
+        $errors[$field['field_name']][$langcode][$delta][] = array(
+          'error' => 'isbn_invalid',
+          'message' => t('Invalid ISBN number'),
+        );
+      }
+      
+    }
+  }
+}
+
+
+/**
+ * Implements hook_field_is_empty().
+ *
+ * hook_field_is_emtpy() is where Drupal asks us if this field is empty.
+ * Return TRUE if it does not contain data, FALSE if it does. This lets
+ * the form API flag an error when required fields are empty.
+ */
+function isbn_field_is_empty($item, $field) {
+  return empty($item['value']);
+}
+
+/**
+ * Implements hook_field_formatter_info().
+ *
+ * @see field_example_field_formatter_view()
+ */
+function isbn_field_formatter_info() {
+  return array(
+    // This formatter displays the 13 digit ISBN digit
+    'isbn_13' => array(
+      'label' => t('ISBN: 13 Digit'),
+      'field types' => array('isbn'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_field_formatter_view().
+ *
+ * One formatter implemented for now.
+ * -isbn_13
+ *    Displays the 13 character ISBN length
+ *
+ * @see field_example_field_formatter_info()
+ */
+function isbn_field_formatter_view($entity_type, $entity, $field, $instance, $langcode, $items, $display) {
+  $element = array();
+
+  switch ($display['type']) {
+    case 'isbn_13':
+      foreach ($items as $delta => $item) {
+        $element[$delta] = array(
+          '#markup' => $item['value'],
+        );
+      }
+      break;
+  }
+
+  return $element;
+}
+
+/**
+ * Implements hook_field_widget_info().
+ *
+ * Currently only providing isbn_text input. More to come.
+ * @see field_example_field_widget_form()
+ */
+function isbn_field_widget_info() {
+  return array(
+    'isbn_text' => array(
+      'label' => t('ISBN Textfield'),
+      'field types' => array('isbn'),
+    ),
+    /*'field_example_3text' => array(
+       'label' => t('RGB text field'),
+       'field types' => array('field_example_rgb'),
+    ),
+    'field_example_colorpicker' => array(
+      'label' => t('Color Picker'),
+      'field types' => array('field_example_rgb'),
+    ),
+     *
+     */
+  );
+}
+
+/**
+ * Implements hook_field_widget_form().
+ *
+ * hook_widget_form() is where Drupal tells us to create form elements for
+ * our field's widget.
+ */
+function isbn_field_widget_form(&$form, &$form_state, $field, $instance, $langcode, $items, $delta, $element) {
+  $value = isset($items[$delta]['value']) ? $items[$delta]['value'] : '';
+
+  $widget = $element;
+  $widget['#delta'] = $delta;
+
+  switch ($instance['widget']['type']) {
+
+    case 'isbn_text':
+      $widget += array(
+        '#type' => 'textfield',
+        '#default_value' => $value,
+        // Allow a slightly larger size that the field length to allow for some
+        // configurations where all characters won't fit in input field.
+        '#size' => 15,
+        '#maxlength' => 13,
+      );
+      break;
+  }
+
+  $element['value'] = $widget;
+  return $element;
+}
+
+/**
+ * Implements hook_field_widget_error().
+ *
+ * hook_field_widget_error() lets us figure out what to do with errors
+ * we might have generated in hook_field_validate(). Generally, we'll just
+ * call form_error().
+ *
+ * @see field_example_field_validate()
+ * @see form_error()
+ */
+function isbn_field_widget_error($element, $error, $form, &$form_state) {
+  switch ($error['error']) {
+    case 'isbn_invalid':
+      form_error($element, $error['message']);
+      break;
+  }
+}
+
+/**
+ * @} End of "defgroup isbn".
+ */
+
+/**
+ * Checks if isbn 13 is valid
+ *
+ * @param (int) Check valid isbn
+ * @return TF of is valid
+ */
+function isbn_13_valid($n) {
+  $check = 0;
+  for ($i = 0; $i < 12; $i+=2) $check += $n[$i];
+  for ($i = 1; $i < 12; $i+=2) $check += 3 * $n[$i];
+  if ($check % 10 != 0) {
+    $check = 10 - ($check % 10);
+  }
+  else {
+    $check = 0;
+  }
+  return $check == $n[12];
+}
